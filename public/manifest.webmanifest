@@ -1,0 +1,10 @@
+{
+  "name": "NO ZZZ — Autonomous Venture Studio",
+  "short_name": "NO ZZZ",
+  "description": "Discover, build, launch, and operate online ventures with an AI workforce.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#11130f",
+  "theme_color": "#d9ff43",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

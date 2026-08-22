@@ -1,0 +1,27 @@
+services:
+  nozzz:
+    build: .
+    restart: unless-stopped
+    init: true
+    read_only: true
+    ports:
+      - "8787:8787"
+    environment:
+      NODE_ENV: production
+      PORT: 8787
+      SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:?Set DATA_ENCRYPTION_KEY}
+      AI_BASE_URL: ${AI_BASE_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-gpt-4o-mini}
+    volumes:
+      - nozzz_data:/app/data
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  nozzz_data:
