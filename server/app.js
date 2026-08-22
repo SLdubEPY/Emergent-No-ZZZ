@@ -131,6 +131,10 @@ app.delete('/api/v1/ventures/:id', writeLimiter, requireCsrf, (req, res) => {
 app.use('/api', (_req, res) => res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Endpoint not found.' } }));
 
 if (config.isProduction) {
+  app.use((_req, res, next) => {
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()');
+    next();
+  });
   app.use(helmet({
     contentSecurityPolicy: { directives: {
       defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"],
@@ -142,8 +146,13 @@ if (config.isProduction) {
   }));
   const dist = path.resolve('dist');
   app.use('/assets', express.static(path.join(dist, 'assets'), { index: false, etag: true, maxAge: '1y', immutable: true, dotfiles: 'deny' }));
-  app.use(express.static(dist, { index: false, etag: true, maxAge: '1h', immutable: false, dotfiles: 'deny' }));
-  app.get('/{*path}', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
+  app.use(express.static(dist, {
+    index: false, etag: true, maxAge: '1h', immutable: false, dotfiles: 'deny',
+    // HTML entry pages must never be cached across deploys: a stale index.html
+    // would reference hashed assets that no longer exist after the next release.
+    setHeaders: (res, filePath) => { if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache'); },
+  }));
+  app.get('/{*path}', (_req, res) => res.set('Cache-Control', 'no-cache').sendFile(path.join(dist, 'index.html')));
 }
 
 app.use((err, req, res, _next) => {

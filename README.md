@@ -65,6 +65,10 @@ docker compose up --build -d
 
 Before accepting real payments or granting agents access to third-party tools, connect production OAuth applications, a transactional email provider, billing, and managed backups. Those services require accounts and credentials owned by the publisher and intentionally cannot be embedded in source code.
 
+## Demo content
+
+The landing page and command center include illustrative operating figures (revenue, active agents, campaign states) for product preview. They are clearly labeled in the UI and are not connected to real accounts, payments, or tools. Wire them to your live integrations before marketing real numbers.
+
 ## Runtime and storage notes
 
 - Requires Node.js **22.5+** (pinned to `node:22-alpine` in the container). The data layer uses the built-in `node:sqlite` module, which is still marked experimental by Node — the warning is suppressed in the production `start` script and container. The API surface used (prepared statements, strict tables, WAL) is small and covered by the test suite; the database file is a single portable file under `data/`. For multi-instance scale-out, migrate to a managed database (e.g. Postgres) or `better-sqlite3`; the storage layer is isolated in `server/store.js`.

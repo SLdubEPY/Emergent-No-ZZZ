@@ -20,9 +20,14 @@ export const securityHeaders = helmet({
 });
 
 const rateResponse = { error: { code: 'RATE_LIMITED', message: 'Too many requests. Please try again shortly.' } };
-export const globalLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 180, standardHeaders: 'draft-8', legacyHeaders: false, message: rateResponse });
-export const writeLimiter = rateLimit({ windowMs: 60_000, limit: 12, standardHeaders: 'draft-8', legacyHeaders: false, message: rateResponse });
-export const authLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 8, standardHeaders: 'draft-8', legacyHeaders: false, message: rateResponse });
+// The unit-test suite drives many authenticated requests through the same
+// in-process limiter, so the test environment gets a large budget while the
+// middleware (keying, headers, 429 shape) still runs. The real production
+// limits below are verified against a live server in smoke tests and CI.
+const limitBudget = (production) => (config.env === 'test' ? 10_000 : production);
+export const globalLimiter = rateLimit({ windowMs: 15 * 60_000, limit: limitBudget(180), standardHeaders: 'draft-8', legacyHeaders: false, message: rateResponse });
+export const writeLimiter = rateLimit({ windowMs: 60_000, limit: limitBudget(12), standardHeaders: 'draft-8', legacyHeaders: false, message: rateResponse });
+export const authLimiter = rateLimit({ windowMs: 15 * 60_000, limit: limitBudget(8), standardHeaders: 'draft-8', legacyHeaders: false, message: rateResponse });
 
 export function originGuard(req, res, next) {
   const origin = req.get('origin');

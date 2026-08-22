@@ -11,8 +11,12 @@ const scrypt = promisify(crypto.scrypt);
 
 test('authenticated encryption rejects tampered venture data', () => {
   const encrypted = encryptJson({ idea: 'confidential venture' });
-  const replacement = encrypted.endsWith('A') ? 'B' : 'A';
-  assert.throws(() => decryptJson(encrypted.slice(0, -1) + replacement));
+  // Tamper the first character (the IV, always fully significant). Flipping
+  // the last character would be unreliable: base64url leaves 4 padding bits
+  // in the final character, so some changes leave the decoded byte identical.
+  const tampered = (encrypted[0] === 'A' ? 'B' : 'A') + encrypted.slice(1);
+  assert.throws(() => decryptJson(tampered));
+  assert.deepEqual(decryptJson(encrypted), { idea: 'confidential venture' });
 });
 
 const validBrief = {
@@ -88,6 +92,58 @@ test('strictly validates and creates tenant-scoped encrypted ventures', async ()
   assert.equal(otherList.body.ventures.length, 0);
   await other.agent.delete(`/api/v1/ventures/${created.body.venture.id}`).set('x-csrf-token', other.csrf).expect(404);
   await agent.delete(`/api/v1/ventures/${created.body.venture.id}`).set('x-csrf-token', csrf).expect(204);
+});
+
+test('rejects malformed JSON bodies with a generic 400', async () => {
+  const response = await request(app).post('/api/v1/operator').set('content-type', 'application/json').send('{bad json').expect(400);
+  assert.equal(response.body.error.code, 'INVALID_JSON');
+});
+
+test('rejects malformed venture ids', async () => {
+  const { agent, csrf } = await secureAgent();
+  const response = await agent.delete('/api/v1/ventures/not-a-uuid').set('x-csrf-token', csrf).expect(400);
+  assert.equal(response.body.error.code, 'INVALID_ID');
+});
+
+test('returns a JSON 404 for unknown API routes', async () => {
+  const response = await request(app).get('/api/v1/unknown-endpoint').expect(404);
+  assert.equal(response.body.error.code, 'NOT_FOUND');
+});
+
+test('rejects script injection in venture briefs', async () => {
+  const { agent, csrf } = await secureAgent();
+  const response = await agent.post('/api/v1/ventures').set('x-csrf-token', csrf).send({ ...validBrief, idea: '<script>alert(1)</script>' }).expect(422);
+  assert.equal(response.body.error.code, 'VALIDATION_FAILED');
+});
+
+test('requires authentication for account export', async () => {
+  const { agent } = await secureAgent();
+  const response = await agent.get('/api/v1/auth/export').expect(401);
+  assert.equal(response.body.error.code, 'AUTH_REQUIRED');
+});
+
+test('rejects weak signup passwords', async () => {
+  const { agent, csrf } = await secureAgent();
+  await agent.post('/api/v1/auth/signup').set('x-csrf-token', csrf).send({ name: 'Weak', email: `weak-${Date.now()}@example.com`, password: 'short' }).expect(422);
+});
+
+test('rejects duplicate account registration from another session', async () => {
+  const { agent, csrf } = await secureAgent();
+  const email = `dup-${Date.now()}@example.com`;
+  await agent.post('/api/v1/auth/signup').set('x-csrf-token', csrf).send({ name: 'Dup', email, password: 'DupPassword2026' }).expect(201);
+  const other = await secureAgent();
+  const response = await other.agent.post('/api/v1/auth/signup').set('x-csrf-token', other.csrf).send({ name: 'Dup Two', email, password: 'DupPassword2026' }).expect(409);
+  assert.equal(response.body.error.code, 'ACCOUNT_EXISTS');
+});
+
+test('parallel signups for one email create exactly one account', async () => {
+  const { agent, csrf } = await secureAgent();
+  const email = `race-${Date.now()}@example.com`;
+  const attempts = await Promise.all([1, 2, 3].map(i => agent.post('/api/v1/auth/signup').set('x-csrf-token', csrf).send({ name: `Race ${i}`, email, password: 'RacePassword2026' })));
+  const codes = attempts.map(r => r.status);
+  assert.equal(codes.filter(c => c === 201).length, 1, 'exactly one signup succeeds');
+  assert.equal(codes.filter(c => c === 409 || c === 403).length, 2, 'the rest are rejected');
+  assert.ok(store.findUserByEmail(email), 'account exists exactly once');
 });
 
 test('supports secure account signup, session rotation, and logout', async () => {
