@@ -1,8 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
+import { promisify } from 'node:util';
 import request from 'supertest';
 import { app } from './app.js';
+import { store } from './store.js';
 import { decryptJson, encryptJson } from './crypto.js';
+
+const scrypt = promisify(crypto.scrypt);
 
 test('authenticated encryption rejects tampered venture data', () => {
   const encrypted = encryptJson({ idea: 'confidential venture' });
@@ -28,6 +33,24 @@ test('health check verifies storage without creating a user session', async () =
   const response = await request(app).get('/api/health').expect(200);
   assert.equal(response.body.status, 'ok');
   assert.equal(response.headers['set-cookie'], undefined);
+});
+
+test('health check reports unavailable when storage fails', async () => {
+  const original = store.health;
+  store.health = () => false;
+  try {
+    const response = await request(app).get('/api/health').expect(503);
+    assert.equal(response.body.status, 'unavailable');
+  } finally { store.health = original; }
+});
+
+test('same-host origin is allowed and marked with Vary: Origin', async () => {
+  const response = await request(app).get('/api/v1/session').set('Host', 'nozzz.test').set('Origin', 'https://nozzz.test').expect(200);
+  assert.match(response.headers.vary || '', /Origin/i);
+});
+
+test('origin with a different host is rejected even when the port matches', async () => {
+  await request(app).get('/api/v1/session').set('Host', 'nozzz.test').set('Origin', 'https://evil.test').expect(403);
 });
 
 test('rejects oversized JSON with an accurate 413 response', async () => {
@@ -80,6 +103,31 @@ test('supports secure account signup, session rotation, and logout', async () =>
   await agent.post('/api/v1/auth/logout').set('x-csrf-token', signup.body.csrfToken).expect(200);
   const anonymous = await agent.get('/api/v1/auth/me').expect(200);
   assert.equal(anonymous.body.user, null);
+});
+
+test('session endpoint returns the authenticated user and CSRF token', async () => {
+  const { agent, csrf } = await secureAgent();
+  const email = `session-${Date.now()}@example.com`;
+  await agent.post('/api/v1/auth/signup').set('x-csrf-token', csrf).send({ name: 'Session Founder', email, password: 'SessionPassword2026' }).expect(201);
+  const session = await agent.get('/api/v1/session').expect(200);
+  assert.equal(session.body.user.email, email);
+  assert.ok(session.body.csrfToken);
+});
+
+test('login upgrades a legacy scrypt work factor and rotates the session', async () => {
+  const { agent, csrf } = await secureAgent();
+  const email = `legacy-${Date.now()}@example.com`;
+  const password = 'LegacyPassword2026';
+  const salt = crypto.randomBytes(16).toString('base64url');
+  const derived = Buffer.from(await scrypt(password, salt, 64, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }));
+  const legacyHash = `scrypt$16384$${salt}$${derived.toString('base64url')}`;
+  store.createUser(email, 'Legacy Founder', legacyHash);
+
+  const login = await agent.post('/api/v1/auth/login').set('x-csrf-token', csrf).send({ email, password }).expect(200);
+  assert.ok(login.body.user.email, email);
+  assert.ok(login.body.csrfToken);
+  const upgraded = store.findUserByEmail(email);
+  assert.ok(upgraded.password_hash.startsWith('scrypt$32768$'), 'password hash upgraded to current work factor');
 });
 
 test('returns a generic error for invalid login credentials', async () => {
