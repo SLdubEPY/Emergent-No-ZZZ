@@ -3,3 +3,14 @@
 @media(max-width:900px){.header-actions .login{display:block;max-width:95px;padding:8px}.header-actions .top-cta{display:none}}
 @media(max-width:480px){.room-brief{grid-template-columns:1fr}.room-brief>div{border-right:0}.room-roadmap>div{grid-template-columns:28px 1fr}.room-roadmap em{grid-column:2;width:max-content}.build-room-head>strong{font-size:20px}}
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}.close:disabled{opacity:.35;cursor:not-allowed}.operator-input button:disabled{opacity:.55;cursor:not-allowed}
+.account-password{margin-top:22px;border-top:1px solid #d9d8d2;padding-top:18px}
+.account-password>b{font-size:10px}
+.account-password p{font-size:8px!important;margin:5px 0 10px!important;color:#7c7f77}
+.account-password input{margin-bottom:7px}
+.account-password button{width:100%;border:1px solid #c9d2a0;background:#f3f8e2;color:#51620a;height:38px;font-size:8px;font-weight:800}
+.account-password button:disabled{opacity:.45;cursor:not-allowed}
+.crash-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:40px;background:#f7f6f1}
+.crash-screen .logo{font-size:34px}
+.crash-screen h1{font:700 40px 'Manrope';letter-spacing:-2px;margin:6px 0 0}
+.crash-screen p{max-width:430px;color:#666962;font-size:13px;line-height:1.6;margin:0}
+.crash-screen .primary{margin-top:10px}

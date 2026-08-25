@@ -6,6 +6,7 @@ import request from 'supertest';
 import { app } from './app.js';
 import { store } from './store.js';
 import { decryptJson, encryptJson } from './crypto.js';
+import { newSession } from './auth.js';
 
 const scrypt = promisify(crypto.scrypt);
 
@@ -144,6 +145,54 @@ test('parallel signups for one email create exactly one account', async () => {
   assert.equal(codes.filter(c => c === 201).length, 1, 'exactly one signup succeeds');
   assert.equal(codes.filter(c => c === 409 || c === 403).length, 2, 'the rest are rejected');
   assert.ok(store.findUserByEmail(email), 'account exists exactly once');
+});
+
+test('changes password, revokes other sessions, and invalidates the old password', async () => {
+  const { agent, csrf } = await secureAgent();
+  const email = `pw-${Date.now()}@example.com`;
+  const password = 'OriginalPassword2026';
+  const signup = await agent.post('/api/v1/auth/signup').set('x-csrf-token', csrf).send({ name: 'PW Founder', email, password }).expect(201);
+  const accountCsrf = signup.body.csrfToken; // session rotated at signup
+
+  // A second device signs in and must be revoked after the password change.
+  const other = await secureAgent();
+  const login = await other.agent.post('/api/v1/auth/login').set('x-csrf-token', other.csrf).send({ email, password }).expect(200);
+  assert.ok(login.body.csrfToken);
+
+  const wrong = await agent.post('/api/v1/auth/password').set('x-csrf-token', accountCsrf).send({ currentPassword: 'WrongPassword2026', newPassword: 'NewPassword2026x' }).expect(401);
+  assert.equal(wrong.body.error.code, 'INVALID_CREDENTIALS');
+  await agent.post('/api/v1/auth/password').set('x-csrf-token', accountCsrf).send({ currentPassword: password, newPassword: 'weak' }).expect(422);
+  await agent.post('/api/v1/auth/password').set('x-csrf-token', accountCsrf).send({ currentPassword: password, newPassword: 'NewPassword2026x' }).expect(200);
+
+  const revoked = await other.agent.get('/api/v1/auth/me').expect(200);
+  assert.equal(revoked.body.user, null, 'other device session revoked');
+  const changed = await agent.get('/api/v1/auth/me').expect(200);
+  assert.equal(changed.body.user.email, email, 'current device stays signed in');
+
+  await agent.post('/api/v1/auth/logout').set('x-csrf-token', accountCsrf).expect(200);
+  const oldPw = await secureAgent();
+  await oldPw.agent.post('/api/v1/auth/login').set('x-csrf-token', oldPw.csrf).send({ email, password }).expect(401);
+  const newPw = await secureAgent();
+  await newPw.agent.post('/api/v1/auth/login').set('x-csrf-token', newPw.csrf).send({ email, password: 'NewPassword2026x' }).expect(200);
+});
+
+test('requires authentication to change a password', async () => {
+  const { agent, csrf } = await secureAgent();
+  const response = await agent.post('/api/v1/auth/password').set('x-csrf-token', csrf).send({ currentPassword: 'Whatever2026x', newPassword: 'NewPassword2026x' }).expect(401);
+  assert.equal(response.body.error.code, 'AUTH_REQUIRED');
+});
+
+test('cleanup removes orphaned guest ventures after the session is gone', () => {
+  const session = newSession();
+  const venture = store.create(session.ownerId, validBrief, 80);
+  assert.equal(store.list(session.ownerId).length, 1);
+  // Guest data is reachable only through its session; once the session is
+  // destroyed (logout/expiry) the encrypted venture becomes unreachable and
+  // must be removed by the periodic cleanup instead of accumulating forever.
+  store.deleteSession(session.tokenHash);
+  store.cleanExpiredSessions();
+  assert.equal(store.list(session.ownerId).length, 0);
+  assert.equal(store.list(venture ? session.ownerId : '').length, 0);
 });
 
 test('supports secure account signup, session rotation, and logout', async () => {

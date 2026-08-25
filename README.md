@@ -9,7 +9,7 @@
 - Multi-step Venture Launchpad that turns a founder brief into a complete blueprint
 - Working venture Build Room with production roadmap and downloadable blueprint
 - Secure server-side workspace for saved ventures
-- Founder data export, permanent account deletion, secure login, and logout controls
+- Founder data export, permanent account deletion, secure login and logout, and password rotation with instant sign-out of other devices
 - AI workforce architecture with six specialized operating agents
 - Interactive command center with venture state and agent activity
 - Contextual NO ZZZ Operator for research and launch-planning conversations

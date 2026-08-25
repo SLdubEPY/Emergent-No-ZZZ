@@ -8,7 +8,7 @@ The browser is untrusted. Every write is revalidated and authorized by the API. 
 
 - **Fail-closed production configuration:** startup fails unless strong session and encryption secrets are supplied.
 - **Secure sessions:** 256-bit opaque tokens, SHA-256 server-side token storage, rotation on authentication, `HttpOnly`, `SameSite=Strict`, path-scoped cookies, and `Secure` in production.
-- **Account protection:** passwords use per-user salts and memory-hard scrypt derivation; legacy work factors upgrade automatically after successful login, login errors resist account enumeration, and authentication has a dedicated rate limit.
+- **Account protection:** passwords use per-user salts and memory-hard scrypt derivation; legacy work factors upgrade automatically after successful login, login errors resist account enumeration, and authentication has a dedicated rate limit. Authenticated founders can rotate their password, which immediately revokes every other signed-in device while keeping the current session.
 - **CSRF protection:** all state-changing requests require a session-bound HMAC token compared in constant time.
 - **Origin enforcement:** browser origins must match the request host or an explicit allowlist.
 - **Strict validation:** Zod schemas reject unknown keys, oversized content, invalid enum values, control characters, and malformed IDs.
@@ -20,6 +20,7 @@ The browser is untrusted. Every write is revalidated and authorized by the API. 
 - **Resource limits:** JSON bodies are capped at 32 KB with correct `413` responses, AI provider responses at 1 MB, result sets at 50 records, browser API requests at 20 seconds, outbound AI calls at 15 seconds, and graceful shutdown drains requests.
 - **Transactional session rotation:** replacement sessions and anonymous-venture transfers commit atomically before old sessions are revoked, preventing orphaned work during storage failures.
 - **Privacy controls:** authenticated founders can export a machine-readable copy or permanently delete their account, sessions, and ventures after password confirmation.
+- **Data hygiene:** expired sessions are removed on a rolling basis, and encrypted ventures belonging to vanished guest sessions are cleaned up so unreachable data does not accumulate.
 - **Account boundary protection:** authenticated account switching is blocked so one account’s ventures can never be accidentally transferred to another.
 - **SQL safety:** prepared statements only, strict tables, bounded constraints, foreign keys, and tenant-indexed queries.
 - **Error containment:** malformed JSON and server failures return generic messages without stack traces.

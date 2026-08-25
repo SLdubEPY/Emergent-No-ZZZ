@@ -66,6 +66,7 @@ export const api = {
   signUp: input => request('/v1/auth/signup', { method: 'POST', body: JSON.stringify(input) }),
   login: input => request('/v1/auth/login', { method: 'POST', body: JSON.stringify(input) }),
   logout: () => request('/v1/auth/logout', { method: 'POST' }),
+  changePassword: input => request('/v1/auth/password', { method: 'POST', body: JSON.stringify(input) }),
   me: () => request('/v1/auth/me'),
   exportAccount: () => request('/v1/auth/export'),
   deleteAccount: password => request('/v1/auth/account', { method: 'DELETE', body: JSON.stringify({ password, confirmation: 'DELETE' }) }),

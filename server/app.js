@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { config } from './config.js';
 import { store } from './store.js';
-import { BriefSchema, DeleteAccountSchema, IdSchema, LoginSchema, OperatorSchema, SignUpSchema } from './schemas.js';
+import { BriefSchema, ChangePasswordSchema, DeleteAccountSchema, IdSchema, LoginSchema, OperatorSchema, SignUpSchema } from './schemas.js';
 import { authLimiter, globalLimiter, originGuard, requireCsrf, securityHeaders, session, setSessionCookie, writeLimiter } from './security.js';
 import { destroyToken, hashPassword, newSession, passwordNeedsRehash, verifyPassword } from './auth.js';
 import { csrfFor } from './crypto.js';
@@ -80,6 +80,18 @@ app.post('/api/v1/auth/logout', writeLimiter, requireCsrf, (req, res) => {
   destroyToken(req.sessionToken);
   setSessionCookie(res, active.token);
   res.set('cache-control', 'no-store').json({ csrfToken: csrfFor(active.token) });
+});
+app.post('/api/v1/auth/password', authLimiter, requireCsrf, async (req, res) => {
+  if (!req.userId) return res.status(401).json({ error: { code: 'AUTH_REQUIRED', message: 'Log in to change your password.' } });
+  const parsed = ChangePasswordSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(422).json({ error: { code: 'VALIDATION_FAILED', message: 'New password must be 10+ characters with letters and numbers.' } });
+  const user = store.findUserById(req.userId);
+  const record = user ? store.findUserByEmail(user.email) : null;
+  if (!record || !(await verifyPassword(parsed.data.currentPassword, record.password_hash))) return res.status(401).json({ error: { code: 'INVALID_CREDENTIALS', message: 'Current password is incorrect.' } });
+  store.updatePasswordHash(record.id, await hashPassword(parsed.data.newPassword));
+  // Rotating the password invalidates every other signed-in device immediately.
+  store.revokeOtherSessions(record.id, req.sessionHash);
+  res.set('cache-control', 'no-store').json({ updated: true });
 });
 app.get('/api/v1/auth/export', (req, res) => {
   if (!req.userId) return res.status(401).json({ error: { code: 'AUTH_REQUIRED', message: 'Log in to export account data.' } });

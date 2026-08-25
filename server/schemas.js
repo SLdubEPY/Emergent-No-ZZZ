@@ -15,10 +15,17 @@ export const BriefSchema = z.object({
 
 export const IdSchema = z.string().uuid();
 
+const passwordRule = z.string().min(10).max(128).refine(v => /[A-Za-z]/.test(v) && /\d/.test(v), 'Use letters and numbers');
+
 export const SignUpSchema = z.object({
   email: z.string().trim().toLowerCase().email().max(254),
   name: cleanText(60),
-  password: z.string().min(10).max(128).refine(v => /[A-Za-z]/.test(v) && /\d/.test(v), 'Use letters and numbers'),
+  password: passwordRule,
+}).strict();
+
+export const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1).max(128),
+  newPassword: passwordRule,
 }).strict();
 
 export const LoginSchema = z.object({

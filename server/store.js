@@ -67,6 +67,8 @@ const insertSession = db.prepare('INSERT INTO sessions (token_hash, owner_id, us
 const findSession = db.prepare('SELECT token_hash, owner_id, user_id, expires_at FROM sessions WHERE token_hash = ? AND expires_at > ?');
 const deleteSession = db.prepare('DELETE FROM sessions WHERE token_hash = ?');
 const cleanSessions = db.prepare('DELETE FROM sessions WHERE expires_at <= ?');
+const cleanGuestOrphans = db.prepare(`DELETE FROM ventures WHERE owner_id LIKE 'guest:%' AND owner_id NOT IN (SELECT owner_id FROM sessions)`);
+const revokeOtherSessions = db.prepare('DELETE FROM sessions WHERE user_id = ? AND token_hash <> ?');
 const transferVentures = db.prepare('UPDATE ventures SET owner_id = ? WHERE owner_id = ?');
 const deleteUserVentures = db.prepare('DELETE FROM ventures WHERE owner_id = ?');
 const deleteUserSessions = db.prepare('DELETE FROM sessions WHERE user_id = ?');
@@ -112,7 +114,18 @@ export const store = {
     return row ? { tokenHash: row.token_hash, ownerId: row.owner_id, userId: row.user_id, expiresAt: row.expires_at } : null;
   },
   deleteSession(tokenHash) { deleteSession.run(tokenHash); },
-  cleanExpiredSessions() { return cleanSessions.run(new Date().toISOString()).changes; },
+  cleanExpiredSessions() {
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const expired = cleanSessions.run(new Date().toISOString()).changes;
+      // Guest workspaces are keyed to their session; once that session is gone
+      // (logout or expiry) the encrypted ventures are unreachable, so remove them.
+      const orphans = cleanGuestOrphans.run().changes;
+      db.exec('COMMIT');
+      return { expired, orphans };
+    } catch (error) { db.exec('ROLLBACK'); throw error; }
+  },
+  revokeOtherSessions(userId, keepTokenHash) { return revokeOtherSessions.run(userId, keepTokenHash).changes; },
   deleteAccount(userId) {
     const ownerId = `user:${userId}`;
     db.exec('BEGIN IMMEDIATE');
